@@ -15,6 +15,16 @@ curl -X POST http://localhost:8080/download \
 
 `format` may be `best` (default), `mp4`, or `mp3`. The service does not permit caller-provided yt-dlp flags, local files, private-network URLs, or playlists.
 
+To extract metadata and direct video variants without downloading them through the API:
+
+```sh
+curl -X POST http://localhost:8080/info \
+  -H 'content-type: application/json' \
+  -d '{"url":"https://example.com/media-page"}'
+```
+
+The response contains `title`, `thumbnail`, and `videoFormats`. Direct format URLs are temporary provider URLs; request `/info` again when a returned URL has expired.
+
 ## Publish to Docker Hub
 
 Replace `YOUR_DOCKERHUB_USER` with your Docker Hub namespace:
