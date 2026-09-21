@@ -7,6 +7,7 @@ import ipaddress
 import os
 import socket
 import tempfile
+import json
 from contextlib import suppress
 from pathlib import Path
 from typing import Literal
@@ -34,6 +35,15 @@ class DownloadRequest(BaseModel):
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("url must be an absolute http(s) URL")
         return value
+
+
+class MediaInfoRequest(BaseModel):
+    url: str = Field(description="Public http(s) URL of the media page")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        return DownloadRequest.validate_url(value)
 
 
 def is_public_hostname(hostname: str) -> bool:
@@ -73,6 +83,57 @@ def build_command(request: DownloadRequest, output_template: str) -> list[str]:
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok", "version": APP_VERSION}
+
+
+@app.post("/info")
+async def info(request: MediaInfoRequest) -> dict[str, object]:
+    """Return media metadata and downloadable video variants without downloading them."""
+    hostname = urlparse(request.url).hostname
+    if hostname is None or not is_public_hostname(hostname):
+        raise HTTPException(status_code=422, detail="url must resolve only to public IP addresses")
+
+    process = await asyncio.create_subprocess_exec(
+        "yt-dlp",
+        "--no-playlist",
+        "--no-warnings",
+        "--skip-download",
+        "--dump-single-json",
+        "--",
+        request.url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=DOWNLOAD_TIMEOUT_SECONDS)
+    except TimeoutError:
+        with suppress(ProcessLookupError):
+            process.kill()
+        with suppress(Exception):
+            await process.communicate()
+        raise HTTPException(status_code=504, detail="media lookup timed out")
+
+    if process.returncode != 0:
+        message = stderr.decode("utf-8", errors="replace").strip()
+        raise HTTPException(status_code=422, detail=message[-500:] or "yt-dlp could not inspect this URL")
+
+    try:
+        metadata = json.loads(stdout)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="yt-dlp returned invalid media metadata")
+
+    formats = [
+        {
+            "url": item["url"],
+            "videoQuality": f"{item['height']}p" if item.get("height") else item.get("format_note", "unknown"),
+        }
+        for item in metadata.get("formats", [])
+        if item.get("url") and item.get("vcodec") not in {None, "none"}
+    ]
+    return {
+        "title": metadata.get("title") or "untitled",
+        "thumbnail": metadata.get("thumbnail"),
+        "videoFormats": formats,
+    }
 
 
 @app.post("/download")
