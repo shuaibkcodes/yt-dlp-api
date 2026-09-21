@@ -102,7 +102,7 @@ async def download(request: DownloadRequest) -> FileResponse:
         raise
 
     files = list(temp_dir.glob("download.*"))
-    if result.returncode != 0 or len(files) != 1:
+    if process.returncode != 0 or len(files) != 1:
         _delete_directory(temp_dir)
         message = stderr.decode("utf-8", errors="replace").strip()
         raise HTTPException(status_code=422, detail=message[-500:] or "yt-dlp could not download this URL")
