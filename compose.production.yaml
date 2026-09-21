@@ -1,0 +1,35 @@
+services:
+  yt-dlp-api:
+    image: ${DOCKER_IMAGE:?Set DOCKER_IMAGE to your Docker Hub image}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=${TMPFS_SIZE:-3g},mode=1777
+    environment:
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-2147483648}
+      DOWNLOAD_TIMEOUT_SECONDS: ${DOWNLOAD_TIMEOUT_SECONDS:-900}
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+networks:
+  internal:
+
+volumes:
+  caddy_data:
+  caddy_config:

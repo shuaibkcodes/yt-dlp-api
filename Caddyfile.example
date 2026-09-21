@@ -1,0 +1,4 @@
+# Replace this with your real subdomain before deploying.
+downloads.example.com {
+    reverse_proxy yt-dlp-api:8080
+}

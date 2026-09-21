@@ -1,0 +1,16 @@
+services:
+  yt-dlp-api:
+    build: .
+    image: ${DOCKER_IMAGE:-your-dockerhub-user/yt-dlp-api:latest}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=3g,mode=1777
+    environment:
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-2147483648}
+      DOWNLOAD_TIMEOUT_SECONDS: ${DOWNLOAD_TIMEOUT_SECONDS:-900}
