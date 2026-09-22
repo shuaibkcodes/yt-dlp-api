@@ -7,10 +7,30 @@ services:
     security_opt:
       - no-new-privileges:true
     tmpfs:
-      - /tmp:size=${TMPFS_SIZE:-3g},mode=1777
+      - /tmp:size=${TMPFS_SIZE:-1g},mode=1777
+    volumes:
+      # Only mounted when COOKIES_FILE is set; read-only, the app stages a writable copy.
+      - ${COOKIES_FILE:-/dev/null}:/run/secrets/cookies.txt:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "${CPU_LIMIT:-0.1}"
+          memory: ${MEMORY_LIMIT:-512m}
     environment:
-      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-2147483648}
+      WORKER_COUNT: ${WORKER_COUNT:-2}
+      WORKER_THREADS: ${WORKER_THREADS:-12}
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-268435456}
       DOWNLOAD_TIMEOUT_SECONDS: ${DOWNLOAD_TIMEOUT_SECONDS:-900}
+      DOWNLOAD_CONCURRENCY: ${DOWNLOAD_CONCURRENCY:-3}
+      DOWNLOAD_QUEUE_SIZE: ${DOWNLOAD_QUEUE_SIZE:-32}
+      DOWNLOAD_QUEUE_WAIT_SECONDS: ${DOWNLOAD_QUEUE_WAIT_SECONDS:-180}
+      INFO_CONCURRENCY: ${INFO_CONCURRENCY:-20}
+      INFO_QUEUE_SIZE: ${INFO_QUEUE_SIZE:-80}
+      INFO_CACHE_TTL_SECONDS: ${INFO_CACHE_TTL_SECONDS:-300}
+      NEGATIVE_CACHE_TTL_SECONDS: ${NEGATIVE_CACHE_TTL_SECONDS:-30}
+      YTDLP_EXTRACTOR_ARGS: ${YTDLP_EXTRACTOR_ARGS:-}
+      # Set COOKIES_FILE on the host to enable sites that refuse anonymous access.
+      YTDLP_COOKIES_FILE: ${COOKIES_FILE:+/run/secrets/cookies.txt}
     networks:
       - internal
 
