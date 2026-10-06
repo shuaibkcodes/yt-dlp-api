@@ -17,6 +17,7 @@ REASON_STATUS = {
     "too_large": 413,
     "extraction_failed": 422,
     "blocked_url": 422,
+    "unresolvable_host": 422,
 }
 
 _MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (

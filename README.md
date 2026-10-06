@@ -170,6 +170,7 @@ Failures carry a stable `reason` alongside the yt-dlp text, so a caller can bran
 | `unsupported_url` | 422 | No extractor handles it |
 | `extraction_failed` | 422 | Anything else |
 | `blocked_url` | 422 | Not an absolute http(s) URL, or it resolves to a private address |
+| `unresolvable_host` | 422 | The URL's host name does not resolve (typo, dead domain, or a DNS failure) |
 | `queue_saturated` | 503 | Measured wait exceeds the limit; refused up front |
 | `queue_full` | 503 | No waiting room left |
 | `queue_timeout` | 503 | Waited for a slot and never started |
