@@ -123,20 +123,24 @@ class MediaInfoRequest(BaseModel):
 _hostname_cache = TTLCache(config.HOSTNAME_CACHE_TTL_SECONDS, config.HOSTNAME_CACHE_SIZE)
 
 
-async def is_public_hostname(hostname: str) -> bool:
-    """Reject loopback/private destinations so the endpoint cannot fetch local services."""
+async def is_public_hostname(hostname: str) -> bool | None:
+    """Reject loopback/private destinations so the endpoint cannot fetch local services.
+
+    None means the name did not resolve, which is not the same as resolving to
+    a private address and must not be reported as one.
+    """
     loop = asyncio.get_running_loop()
     try:
         # The resolver runs off the event loop; a blocking lookup would stall every request.
         addresses = await loop.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     except OSError:
-        return False
+        return None
 
     for address in addresses:
         ip = ipaddress.ip_address(address[4][0])
         if not ip.is_global:
             return False
-    return bool(addresses)
+    return bool(addresses) or None
 
 
 async def require_public_url(url: str) -> None:
@@ -144,12 +148,17 @@ async def require_public_url(url: str) -> None:
     if hostname is None:
         raise media_error("url must resolve only to public IP addresses", "blocked_url")
     # Repeated hits on one host skip the resolver entirely.
-    verdict = await _hostname_cache.get_or_create(hostname, lambda: _verdict(hostname))
+    # A failed lookup is not cached: it is often a transient resolver hiccup.
+    verdict = await _hostname_cache.get_or_create(
+        hostname, lambda: _verdict(hostname), ttl_for=lambda v: 0 if v["public"] is None else None
+    )
+    if verdict["public"] is None:
+        raise media_error(f"could not resolve host {hostname!r}; check the url", "unresolvable_host")
     if not verdict["public"]:
         raise media_error("url must resolve only to public IP addresses", "blocked_url")
 
 
-async def _verdict(hostname: str) -> dict[str, bool]:
+async def _verdict(hostname: str) -> dict[str, bool | None]:
     return {"public": await is_public_hostname(hostname)}
 
 
@@ -223,9 +232,13 @@ def base_options() -> dict[str, object]:
 
 
 def format_selector(wanted: str) -> str:
-    """Prefer already-muxed streams: merging costs an ffmpeg pass this CPU cannot spare."""
+    """Prefer already-muxed streams: merging costs an ffmpeg pass this CPU cannot spare.
+
+    `!=?none` also admits an unknown codec: Instagram's progressive files carry
+    sound but no acodec field, and a plain `!=none` would reject them.
+    """
     if wanted == "mp4":
-        selector = "best[ext=mp4][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]"
+        selector = "best[ext=mp4][acodec!=?none][vcodec!=?none]/best[acodec!=?none][vcodec!=?none]"
         if config.ALLOW_REMUX:
             selector = f"{selector}/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
         return selector
@@ -395,7 +408,10 @@ async def _fetch_info_via_cli(url: str) -> dict[str, object]:
             "videoQuality": f"{item['height']}p" if item.get("height") else item.get("format_note", "unknown"),
         }
         for item in metadata.get("formats", [])
-        if item.get("url") and item.get("vcodec") not in {None, "none"}
+        # A video-only stream (acodec "none", e.g. Instagram/YouTube DASH) plays
+        # silently. An unknown codec counts as present, as yt-dlp treats it: Instagram's
+        # progressive files, the ones with sound, carry no codec fields at all.
+        if item.get("url") and item.get("vcodec") != "none" and item.get("acodec") != "none"
     ]
     return {
         "title": metadata.get("title") or "untitled",

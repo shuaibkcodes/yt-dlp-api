@@ -102,7 +102,10 @@ class Worker:
                 else item.get("format_note", "unknown"),
             }
             for item in metadata.get("formats", [])
-            if item.get("url") and item.get("vcodec") not in {None, "none"}
+            # A video-only stream (acodec "none", e.g. Instagram/YouTube DASH) plays
+            # silently. An unknown codec counts as present, as yt-dlp treats it: Instagram's
+            # progressive files, the ones with sound, carry no codec fields at all.
+            if item.get("url") and item.get("vcodec") != "none" and item.get("acodec") != "none"
         ]
         return {
             "title": metadata.get("title") or "untitled",
